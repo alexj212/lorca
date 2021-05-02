@@ -26,6 +26,10 @@ type result struct {
 
 type bindingFunc func(args []json.RawMessage) (interface{}, error)
 
+type ExposeTargetMessage func(args TargetMessage)
+
+
+
 // Msg is a struct for incoming messages (results and async events)
 type msg struct {
 	ID     int             `json:"id"`
@@ -45,6 +49,7 @@ type chrome struct {
 	window   int
 	pending  map[int]chan result
 	bindings map[string]bindingFunc
+	targetMessageHandler ExposeTargetMessage
 }
 
 func newChromeWithArgs(chromeBinary string, args ...string) (*chrome, error) {
@@ -232,7 +237,7 @@ type targetMessageTemplate struct {
 	Result json.RawMessage `json:"result"`
 }
 
-type targetMessage struct {
+type TargetMessage struct {
 	targetMessageTemplate
 	Result struct {
 		Result struct {
@@ -266,8 +271,12 @@ func (c *chrome) readLoop() {
 			if params.SessionID != c.session {
 				continue
 			}
-			res := targetMessage{}
+			res := TargetMessage{}
 			json.Unmarshal([]byte(params.Message), &res)
+
+			if c.targetMessageHandler != nil {
+				c.targetMessageHandler(res)
+			}
 
 			if res.ID == 0 && res.Method == "Runtime.consoleAPICalled" || res.Method == "Runtime.exceptionThrown" {
 				log.Println(params.Message)
